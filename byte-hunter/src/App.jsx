@@ -69,7 +69,11 @@ const [showNameInput, setShowNameInput] = useState(false);
       setScore(score - 5);
       setIntegrity(prev => {
         const newIntegrity = prev - 20;
-        if (newIntegrity <= 0) setGameState('gameover');
+        // Dentro de handleTargetClick o donde restas integridad:
+if (newIntegrity <= 0) {
+  setGameState('gameover');
+  checkHighScores(score); // Llamamos a la función que revisa si hubo récord
+};
         return newIntegrity;
       });
     }
