@@ -28,8 +28,9 @@ const [showNameInput, setShowNameInput] = useState(false);
     const timerInterval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          setGameState('gameover');
-          return 0;
+  setGameState('gameover');
+  checkHighScores(score); // Importante llamar esto aquí también
+  return 0;
         }
         return prev - 1;
       });
@@ -86,6 +87,22 @@ if (newIntegrity <= 0) {
     setTargets([]);
     setGameState('playing');
   };
+  const checkHighScores = (currentScore) => {
+  // 1. Actualizar récord personal simple
+  if (currentScore > highScore) {
+    setHighScore(currentScore);
+    localStorage.setItem('byteHunterScore', currentScore);
+  }
+
+  // 2. Verificar si entra en el Top 5
+  const isTopScore = leaderboard.length < 5 || currentScore > leaderboard[leaderboard.length - 1]?.score;
+  
+  if (isTopScore && currentScore > 0) {
+    setShowNameInput(true); // Esto hará que cargue la pantalla para poner el nombre
+  } else {
+    setShowNameInput(false); // Si no hay récord, muestra la tabla directamente
+  }
+};
 
   const saveToLeaderboard = () => {
   if (playerName.trim() === '') return;
