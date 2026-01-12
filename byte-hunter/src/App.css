@@ -49,3 +49,27 @@ button:hover {
   border: 1px dashed #00ff41;
   padding: 100px;
 }
+
+.leaderboard-list {
+  text-align: left;
+  background: rgba(0, 255, 65, 0.1);
+  padding: 10px;
+  border: 1px solid #00ff41;
+  margin: 10px 0;
+}
+
+.leaderboard-item {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.3);
+  padding: 5px 0;
+}
+
+.name-input-field {
+  background: #000;
+  border: 1px solid #00ff41;
+  color: #00ff41;
+  padding: 8px;
+  margin-right: 5px;
+  font-family: 'Courier New', monospace;
+}

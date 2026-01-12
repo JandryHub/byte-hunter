@@ -8,6 +8,15 @@ function App() {
   const [integrity, setIntegrity] = useState(100); 
   const [timeLeft, setTimeLeft] = useState(60);
   const [targets, setTargets] = useState([]); 
+  const [highScore, setHighScore] = useState(
+  parseInt(localStorage.getItem('byteHunterScore')) || 0
+);
+// Cargamos la lista de récords o una vacía si no hay nada
+const [leaderboard, setLeaderboard] = useState(
+  JSON.parse(localStorage.getItem('byteHunterLeaderboard')) || []
+);
+const [playerName, setPlayerName] = useState('');
+const [showNameInput, setShowNameInput] = useState(false);
 
   // Configuración
   const SPAWN_RATE = 1000; 
@@ -74,6 +83,35 @@ function App() {
     setGameState('playing');
   };
 
+  const saveToLeaderboard = () => {
+  if (playerName.trim() === '') return;
+
+  const newEntry = { name: playerName, score: score };
+  const updatedLeaderboard = [...leaderboard, newEntry]
+    .sort((a, b) => b.score - a.score) // Ordenar de mayor a menor
+    .slice(0, 5); // Guardar solo los 5 mejores
+
+  setLeaderboard(updatedLeaderboard);
+  localStorage.setItem('byteHunterLeaderboard', JSON.stringify(updatedLeaderboard));
+  setShowNameInput(false);
+  setPlayerName('');
+};
+
+  // Dentro del useEffect o donde manejas el Game Over:
+if (gameState === 'gameover') {
+  // Actualizar récord personal simple
+  if (score > highScore) {
+    setHighScore(score);
+    localStorage.setItem('byteHunterScore', score);
+  }
+  
+  // Si el puntaje es lo suficientemente alto para entrar al Top 5
+  const isTopScore = leaderboard.length < 5 || score > leaderboard[leaderboard.length - 1]?.score;
+  if (isTopScore && score > 0) {
+    setShowNameInput(true);
+  }
+}
+
   return (
     <div className="game-container">
       <h1>BYTE HUNTER 🛡️</h1>
@@ -101,12 +139,44 @@ function App() {
       )}
 
       {gameState === 'gameover' && (
-        <div className="menu">
-          <h2 style={{ color: 'red' }}>SISTEMA COMPROMETIDO</h2>
-          <h3>Puntaje Final: {score}</h3>
-          <button onClick={startGame}>REINICIAR</button>
-        </div>
-      )}
+  <div className="menu">
+    <h2 style={{ color: 'red' }}>SISTEMA COMPROMETIDO</h2>
+    <h3>Tu puntaje: {score}</h3>
+    
+    {/* Si el jugador debe ingresar su nombre */}
+    {showNameInput ? (
+      <div style={{ marginBottom: '20px' }}>
+        <p>¡NUEVO RÉCORD DETECTADO!</p>
+        <input 
+          className="name-input-field"
+          type="text" 
+          placeholder="Escribe tu Alias"
+          value={playerName}
+          onChange={(e) => setPlayerName(e.target.value)}
+          maxLength={10}
+        />
+        <button onClick={saveToLeaderboard}>REGISTRAR</button>
+      </div>
+    ) : (
+      /* Si no hay récord, mostramos la tabla directamente */
+      <div className="leaderboard-list">
+        <h4>TOP 5 HACKERS</h4>
+        {leaderboard.length > 0 ? (
+          leaderboard.map((entry, index) => (
+            <div key={index} className="leaderboard-item">
+              <span>{index + 1}. {entry.name}</span>
+              <span>{entry.score} pts</span>
+            </div>
+          ))
+        ) : (
+          <p>No hay registros todavía.</p>
+        )}
+      </div>
+    )}
+
+    {!showNameInput && <button onClick={startGame}>REINTENTAR ESCANEO</button>}
+  </div>
+)}
     </div>
   );
 }
