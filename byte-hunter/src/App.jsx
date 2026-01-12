@@ -29,7 +29,7 @@ const [showNameInput, setShowNameInput] = useState(false);
       setTimeLeft((prev) => {
         if (prev <= 1) {
   setGameState('gameover');
-  checkHighScores(score); // Importante llamar esto aquí también
+  checkHighScores(score); 
   return 0;
         }
         return prev - 1;
