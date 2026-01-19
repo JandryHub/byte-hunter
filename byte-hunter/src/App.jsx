@@ -9,9 +9,12 @@ function App() {
   const [integrity, setIntegrity] = useState(100); 
   const [timeLeft, setTimeLeft] = useState(60);
   const [targets, setTargets] = useState([]); 
-  const [level, setLevel] = useState(1); // Nivel actual
+  const [level, setLevel] = useState(1);
+  
+  // META DE PUNTOS: Nivel 1 = 150, Nivel 2 = 300...
+  const targetScore = level * 150;
 
-  // --- Persistencia (LocalStorage) ---
+  // --- Persistencia ---
   const [highScore, setHighScore] = useState(
     parseInt(localStorage.getItem('byteHunterScore')) || 0
   );
@@ -21,9 +24,6 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [showNameInput, setShowNameInput] = useState(false);
 
-  // Dificultad: Los virus salen más rápido en cada nivel (mínimo 250ms)
-  const spawnRate = Math.max(250, 1000 - (level - 1) * 150); 
-
   // --- Sistema de Récords ---
   const checkHighScores = useCallback((finalScore) => {
     if (finalScore > highScore) {
@@ -31,56 +31,66 @@ function App() {
       localStorage.setItem('byteHunterScore', finalScore.toString());
     }
     const lastScore = leaderboard.length > 0 ? leaderboard[leaderboard.length - 1].score : 0;
-    // Entra al leaderboard si supera al último o si hay menos de 5 registros
     if ((leaderboard.length < 5 || finalScore > lastScore) && finalScore > 0) {
       setShowNameInput(true);
-    } else {
-      setShowNameInput(false);
     }
   }, [highScore, leaderboard]);
 
-  // --- Ciclo de Vida del Juego ---
+  // --- EFECTO 1: EL RELOJ (Solo baja el tiempo) ---
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    // Cronómetro Progresivo
-    const timerInterval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          // ALERTA: Si el tiempo acaba, SUBES DE NIVEL (no pierdes)
-          setLevel(curr => curr + 1);
-          return 60; // Te damos 60 segundos más para el nuevo nivel
-        }
-        return prev - 1;
-      });
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev > 0 ? prev - 1 : 0);
     }, 1000);
 
-    // Generador de Enemigos
-    const spawnerInterval = setInterval(() => {
+    return () => clearInterval(timer);
+  }, [gameState]);
+
+  // --- EFECTO 2: LÓGICA DE NIVEL (Se activa cuando el tiempo cambia) ---
+  useEffect(() => {
+    if (timeLeft === 0 && gameState === 'playing') {
+      // Verificamos si cumplió la meta
+      if (score >= targetScore) {
+        // ¡NIVEL SUPERADO!
+        setLevel(prev => prev + 1); // Sube 1 nivel exactamente
+        setTimeLeft(60);            // Reinicia reloj
+      } else {
+        // GAME OVER
+        setGameState('gameover');
+        checkHighScores(score);
+      }
+    }
+  }, [timeLeft, gameState, score, targetScore, checkHighScores]);
+
+  // --- EFECTO 3: GENERADOR DE VIRUS (Spawner) ---
+  // La velocidad depende del nivel
+  const spawnRate = Math.max(250, 1000 - (level - 1) * 120); 
+
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    const spawner = setInterval(() => {
       spawnTarget();
     }, spawnRate);
 
-    return () => {
-      clearInterval(timerInterval);
-      clearInterval(spawnerInterval);
-    };
-  }, [gameState, spawnRate]); // Se actualiza cuando cambia el nivel (spawnRate)
+    return () => clearInterval(spawner);
+  }, [gameState, spawnRate, level]); // Se reinicia solo si cambia el nivel
 
-  // --- Mecánicas de Juego ---
+  // --- Funciones de Mecánica ---
   const spawnTarget = () => {
     const id = Date.now();
     const rand = Math.random();
     
     let type = 'virus'; 
-    if (rand < 0.2) type = 'file'; // Archivo (No tocar)
-    else if (rand < 0.35 && level >= 2) type = 'trojan'; // Troyano (Solo nivel 2+)
+    if (rand < 0.2) type = 'file'; 
+    else if (rand < 0.35 && level >= 2) type = 'trojan'; 
 
     const x = Math.random() * 80 + 10; 
     const y = Math.random() * 60 + 20; 
 
     setTargets((prev) => [...prev, { id, x, y, type }]);
 
-    // Desaparecen más rápido en niveles altos
     const disappearTime = Math.max(800, 2500 - (level * 150));
     setTimeout(() => {
       setTargets((prev) => prev.filter((t) => t.id !== id));
@@ -91,13 +101,13 @@ function App() {
     setTargets((prev) => prev.filter((t) => t.id !== id));
 
     if (type === 'virus') {
-      setScore(prev => prev + (10 * level)); // Más puntos por nivel
+      setScore(prev => prev + 10);
     } else if (type === 'file') {
       setScore(prev => Math.max(0, prev - 10));
-      updateIntegrity(15); // Daño medio
+      updateIntegrity(15);
     } else if (type === 'trojan') {
       setScore(prev => Math.max(0, prev - 50));
-      updateIntegrity(35); // Daño crítico
+      updateIntegrity(35);
     }
   };
 
@@ -106,11 +116,7 @@ function App() {
       const newIntegrity = prev - damage;
       if (newIntegrity <= 0) {
         setGameState('gameover');
-        // Usamos el score actual del estado para el check
-        setScore(currentScore => {
-            checkHighScores(currentScore);
-            return currentScore;
-        });
+        checkHighScores(score);
         return 0;
       }
       return newIntegrity;
@@ -138,15 +144,18 @@ function App() {
     localStorage.setItem('byteHunterLeaderboard', JSON.stringify(updated));
     setShowNameInput(false);
     setPlayerName('');
-    setGameState('menu'); // Vuelve al menú tras guardar
+    setGameState('menu'); 
   };
 
   return (
     <div className="game-container">
-      {/* Indicador de Nivel Flotante (Arriba Derecha) */}
+      {/* HUD Superior Derecha */}
       {gameState === 'playing' && (
         <div className="level-display">
-          NIVEL {level}
+          <div>NIVEL {level}</div>
+          <div style={{fontSize: '0.8rem', color: score >= targetScore ? '#00ff41' : '#fff', marginTop: '5px'}}>
+            META: {targetScore} PTS
+          </div>
         </div>
       )}
 
@@ -156,13 +165,15 @@ function App() {
       
       <div className="stats">
         <div className="stats-info">
-          <span>PUNTOS: {score}</span>
+          {/* El score cambia a verde cuando pasas la meta */}
+          <span style={{ color: score >= targetScore ? '#00ff41' : 'white', transition: 'color 0.3s' }}>
+            PUNTOS: {score} / {targetScore}
+          </span>
           <span className={timeLeft <= 10 ? 'timer-warning' : ''}>
             TIEMPO: {timeLeft}s
           </span>
         </div>
         
-        {/* Barra de Vida */}
         <div className="health-bar-container">
           <div 
             className={`health-bar-fill ${integrity > 50 ? 'health-green' : integrity > 20 ? 'health-yellow' : 'health-red'}`}
@@ -184,16 +195,24 @@ function App() {
         {gameState === 'menu' && (
           <div className="menu">
             <h2>Misión: Purga de Sistema</h2>
-            <p>👾 Virus (+pts) | 📁 Archivo (-vida)</p>
+            <p>Alcanza la META de puntos antes de que acabe el tiempo.</p>
+            <p>👾 Virus (+10) | 📁 Archivo (-Vida)</p>
             <p>⚠️ Troyano (DANGER - Nivel 2+)</p>
-            <p style={{marginTop: '15px', color: '#fff'}}>Récord Local: {highScore}</p>
             <button onClick={startGame}>INICIAR ESCANEO</button>
           </div>
         )}
 
         {gameState === 'gameover' && (
           <div className="menu">
-            <h2 style={{ color: 'red' }}>SISTEMA COMPROMETIDO</h2>
+            <h2 style={{ color: 'red' }}>CONEXIÓN FINALIZADA</h2>
+            
+            {/* Mensaje dinámico según la causa de muerte */}
+            {timeLeft === 0 && score < targetScore ? (
+                <p style={{color: '#f1c40f'}}>TIEMPO AGOTADO: No alcanzaste la meta de datos.</p>
+            ) : (
+                <p style={{color: '#ff4141'}}>FALLO DE INTEGRIDAD: El sistema colapsó.</p>
+            )}
+
             <h3>Puntos Finales: {score}</h3>
             <p>Nivel Alcanzado: {level}</p>
             
@@ -212,16 +231,7 @@ function App() {
               </div>
             ) : (
               <div className="leaderboard-list">
-                <h4>TOP 5 HACKERS</h4>
-                {leaderboard.length > 0 ? (
-                    leaderboard.map((e, i) => (
-                        <div key={i} className="leaderboard-item">
-                            <span>{i+1}. {e.name}</span>
-                            <span>{e.score}</span>
-                        </div>
-                    ))
-                ) : <p>Sin registros</p>}
-                <button onClick={startGame} style={{marginTop: '20px'}}>REINTENTAR</button>
+                 <button onClick={startGame}>REINTENTAR</button>
               </div>
             )}
           </div>
@@ -229,7 +239,7 @@ function App() {
       </main>
 
       <footer className="game-footer">
-        <p>Byte Hunter v3.0 | Desarrollado por JandryHub | 2026</p>
+        <p>Byte Hunter v5.0 | Desarrollado por JandryHub | 2026</p>
       </footer>
     </div>
   );
