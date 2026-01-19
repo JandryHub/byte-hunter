@@ -3,14 +3,13 @@ import Target from './components/Target';
 import './App.css';
 
 function App() {
-  // --- Estados Principales ---
   const [gameState, setGameState] = useState('menu'); 
   const [score, setScore] = useState(0);
   const [integrity, setIntegrity] = useState(100); 
   const [timeLeft, setTimeLeft] = useState(60);
   const [targets, setTargets] = useState([]); 
+  const [level, setLevel] = useState(1);
 
-  // --- Estados de Persistencia (LocalStorage) ---
   const [highScore, setHighScore] = useState(
     parseInt(localStorage.getItem('byteHunterScore')) || 0
   );
@@ -20,40 +19,28 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [showNameInput, setShowNameInput] = useState(false);
 
-  const SPAWN_RATE = 1000; 
+  // La dificultad aumenta: los virus aparecen más rápido según el nivel
+  const spawnRate = Math.max(300, 1000 - (level - 1) * 150); 
 
-  // --- Lógica de Récords (Corregida) ---
   const checkHighScores = useCallback((finalScore) => {
-    // 1. Actualizar récord personal
     if (finalScore > highScore) {
       setHighScore(finalScore);
-      localStorage.setItem('byteHunterScore', finalScore);
+      localStorage.setItem('byteHunterScore', finalScore.toString());
     }
-
-    // 2. Verificar entrada al Top 5
-    const isTopScore = leaderboard.length < 5 || finalScore > (leaderboard[leaderboard.length - 1]?.score || 0);
-    
-    if (isTopScore && finalScore > 0) {
-      setShowNameInput(true);
-    } else {
-      setShowNameInput(false);
-    }
+    const lastLeaderboardScore = leaderboard.length > 0 ? leaderboard[leaderboard.length - 1].score : 0;
+    const isTopScore = leaderboard.length < 5 || finalScore > lastLeaderboardScore;
+    if (isTopScore && finalScore > 0) setShowNameInput(true);
   }, [highScore, leaderboard]);
 
-  // --- Ciclo de Vida del Juego ---
   useEffect(() => {
     if (gameState !== 'playing') return;
 
     const timerInterval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          setGameState('gameover');
-          // Capturamos el score actual para el leaderboard
-          setScore(currentScore => {
-            checkHighScores(currentScore);
-            return currentScore;
-          });
-          return 0;
+          // Al terminar el tiempo, subes de nivel y el reloj vuelve a 60
+          setLevel(curr => curr + 1);
+          return 60;
         }
         return prev - 1;
       });
@@ -61,136 +48,135 @@ function App() {
 
     const spawnerInterval = setInterval(() => {
       spawnTarget();
-    }, SPAWN_RATE);
+    }, spawnRate);
 
     return () => {
       clearInterval(timerInterval);
       clearInterval(spawnerInterval);
     };
-  }, [gameState, checkHighScores]);
+  }, [gameState, spawnRate, checkHighScores]);
 
-  // --- Funciones de Mecánica ---
   const spawnTarget = () => {
     const id = Date.now();
-    const type = Math.random() > 0.3 ? 'virus' : 'file'; 
+    const rand = Math.random();
+    
+    let type = 'virus'; 
+    if (rand < 0.2) type = 'file'; 
+    else if (rand < 0.35 && level >= 2) type = 'trojan'; // El troyano aparece desde el Nivel 2
+
     const x = Math.random() * 80 + 10; 
     const y = Math.random() * 60 + 20; 
 
     setTargets((prev) => [...prev, { id, x, y, type }]);
 
+    const disappearTime = Math.max(1000, 2500 - (level * 200));
     setTimeout(() => {
       setTargets((prev) => prev.filter((t) => t.id !== id));
-    }, 2500);
+    }, disappearTime);
   };
 
   const handleTargetClick = (id, type) => {
     setTargets((prev) => prev.filter((t) => t.id !== id));
 
     if (type === 'virus') {
-      setScore(prev => prev + 10);
-    } else {
-      setScore(prev => Math.max(0, prev - 5));
-      setIntegrity(prev => {
-        const newIntegrity = prev - 20;
-        if (newIntegrity <= 0) {
-          setGameState('gameover');
-          setScore(currentScore => {
-            checkHighScores(currentScore);
-            return currentScore;
-          });
-          return 0;
-        }
-        return newIntegrity;
-      });
+      setScore(prev => prev + (10 * level));
+    } else if (type === 'file') {
+      setScore(prev => Math.max(0, prev - 10));
+      updateIntegrity(20);
+    } else if (type === 'trojan') {
+      setScore(prev => Math.max(0, prev - 25));
+      updateIntegrity(40);
     }
+  };
+
+  const updateIntegrity = (damage) => {
+    setIntegrity(prev => {
+      const newIntegrity = prev - damage;
+      if (newIntegrity <= 0) {
+        setGameState('gameover');
+        checkHighScores(score);
+        return 0;
+      }
+      return newIntegrity;
+    });
   };
 
   const startGame = () => {
     setScore(0);
     setIntegrity(100);
     setTimeLeft(60);
+    setLevel(1);
     setTargets([]);
-    setShowNameInput(false);
     setGameState('playing');
   };
 
   const saveToLeaderboard = () => {
     if (playerName.trim() === '') return;
-
-    const newEntry = { name: playerName, score: score };
-    const updatedLeaderboard = [...leaderboard, newEntry]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-
-    setLeaderboard(updatedLeaderboard);
-    localStorage.setItem('byteHunterLeaderboard', JSON.stringify(updatedLeaderboard));
+    const updated = [...leaderboard, { name: playerName, score: score }]
+      .sort((a, b) => b.score - a.score).slice(0, 5);
+    setLeaderboard(updated);
+    localStorage.setItem('byteHunterLeaderboard', JSON.stringify(updated));
     setShowNameInput(false);
-    setPlayerName('');
+    setGameState('menu');
   };
 
-  // --- Renderizado ---
   return (
     <div className="game-container">
-      <h1>BYTE HUNTER 🛡️</h1>
+      <header>
+        <h1>BYTE HUNTER 🛡️ <span className="level-badge">Nivel {level}</span></h1>
+      </header>
       
-      <div className="stats" style={{ display: 'flex', gap: '20px', color: '#00ff41', justifyContent: 'center' }}>
-        <span>Puntos: {score}</span>
-        <span>Integridad: {integrity}%</span>
-        <span>Tiempo: {timeLeft}s</span>
+      <div className="stats">
+        <div className="stats-info">
+          <span>Puntos: {score}</span>
+          <span className={timeLeft <= 10 ? 'timer-warning' : ''}>Tiempo: {timeLeft}s</span>
+        </div>
+        
+        <div className="health-bar-container">
+          <div 
+            className={`health-bar-fill ${integrity > 50 ? 'health-green' : integrity > 20 ? 'health-yellow' : 'health-red'}`}
+            style={{ width: `${integrity}%` }}
+          ></div>
+        </div>
+        <span className="integrity-text">Integridad del Sistema: {integrity}%</span>
       </div>
 
-      {gameState === 'playing' && (
-        <div className="game-board">
-          {targets.map((target) => (
-            <Target key={target.id} {...target} onClick={handleTargetClick} />
-          ))}
-        </div>
-      )}
+      <main className="game-wrapper">
+        {gameState === 'playing' && (
+          <div className="game-board">
+            {targets.map((target) => (
+              <Target key={target.id} {...target} onClick={handleTargetClick} />
+            ))}
+          </div>
+        )}
 
-      {gameState === 'menu' && (
-        <div className="menu">
-          <h2>Misión: Eliminar Malware</h2>
-          <p>👾 +10 pts | 📁 -20% vida</p>
-          <button onClick={startGame}>INICIAR ESCANEO</button>
-        </div>
-      )}
+        {gameState === 'menu' && (
+          <div className="menu">
+            <h2>Misión: Escaneo Progresivo</h2>
+            <p>👾 Virus (+pts) | 📁 Archivo (-vida) | ⚠️ Troyano (--vida)</p>
+            <button onClick={startGame}>INICIAR ESCANEO</button>
+          </div>
+        )}
 
-      {gameState === 'gameover' && (
-        <div className="menu">
-          <h2 style={{ color: 'red' }}>SISTEMA COMPROMETIDO</h2>
-          <h3>Score Final: {score}</h3>
-          
-          {showNameInput ? (
-            <div className="leaderboard-entry">
-              <p>¡NUEVO RÉCORD EN EL TOP 5!</p>
-              <input 
-                className="name-input-field"
-                type="text" 
-                placeholder="Ingresa tu Alias"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                maxLength={10}
-              />
-              <button onClick={saveToLeaderboard}>REGISTRAR</button>
-            </div>
-          ) : (
-            <div className="leaderboard-list">
-              <h4>TOP 5 HACKERS</h4>
-              {leaderboard.length > 0 ? (
-                leaderboard.map((entry, index) => (
-                  <div key={index} className="leaderboard-item">
-                    <span>{index + 1}. {entry.name}</span>
-                    <span>{entry.score} pts</span>
-                  </div>
-                ))
-              ) : (
-                <p>No hay registros todavía.</p>
-              )}
-              <button onClick={startGame} style={{ marginTop: '20px' }}>REINTENTAR</button>
-            </div>
-          )}
-        </div>
-      )}
+        {gameState === 'gameover' && (
+          <div className="menu">
+            <h2 style={{ color: 'red' }}>SISTEMA CAÍDO</h2>
+            <h3>Puntaje Final: {score} (Nivel {level})</h3>
+            {showNameInput ? (
+              <div className="leaderboard-entry">
+                <input className="name-input-field" type="text" placeholder="Tu Alias" value={playerName} onChange={(e) => setPlayerName(e.target.value)} maxLength={10} />
+                <button onClick={saveToLeaderboard}>REGISTRAR</button>
+              </div>
+            ) : (
+              <button onClick={startGame}>REINTENTAR</button>
+            )}
+          </div>
+        )}
+      </main>
+
+      <footer className="game-footer">
+        <p>Byte Hunter v2.0 | 2026</p>
+      </footer>
     </div>
   );
 }
