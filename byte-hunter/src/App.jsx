@@ -238,7 +238,7 @@ function App() {
           </div>
         )}
       </main>
-      <footer className="game-footer"><p>Byte Hunter v9.0 | 2026</p></footer>
+      <footer className="game-footer"><p>Byte Hunter v9.0 | © 2026</p></footer>
     </div>
   );
 }
