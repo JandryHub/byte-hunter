@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Target from './components/Target';
 import './App.css';
-
-// --- IMPORTAMOS FIREBASE ---
 import { db } from './firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
@@ -14,89 +12,69 @@ function App() {
   const [timeLeft, setTimeLeft] = useState(30); 
   const [targets, setTargets] = useState([]); 
   const [level, setLevel] = useState(1);
+
+  // --- Estados del Corazón de Vida ---
+  const [showHeart, setShowHeart] = useState(false);
+  const [heartClicks, setHeartClicks] = useState(0);
   
+  // --- Lógica de Puntos y Nivel ---
   const POINTS_PER_LEVEL = 150;
   const targetTotalScore = level * POINTS_PER_LEVEL;
   const currentLevelProgress = score - ((level - 1) * POINTS_PER_LEVEL);
 
+  // Referencia para usar score dentro de intervalos sin perder valor
   const scoreRef = useRef(score);
   useEffect(() => { scoreRef.current = score; }, [score]);
 
-  // --- Estados de Datos ---
-  // El récord personal lo mantenemos local para que veas TU mejor puntaje
+  // --- Estados de Datos (Firebase & Local) ---
   const [localHighScore, setLocalHighScore] = useState(
     parseInt(localStorage.getItem('byteHunterScore')) || 0
   );
-  // El Leaderboard ahora viene de la NUBE (Firebase)
   const [leaderboard, setLeaderboard] = useState([]);
   const [playerName, setPlayerName] = useState('');
   const [showNameInput, setShowNameInput] = useState(false);
 
-  // --- FUNCIONES DE BASE DE DATOS (NUEVO) ---
-  
-  // 1. Cargar el Top 5 Mundial desde Firebase
+  // --- 1. Cargar Ranking Mundial (Firebase) ---
   const fetchLeaderboard = async () => {
     try {
       const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(5));
       const querySnapshot = await getDocs(q);
       const scores = querySnapshot.docs.map(doc => doc.data());
       setLeaderboard(scores);
-    } catch (error) {
-      console.error("Error cargando leaderboard:", error);
-    }
+    } catch (error) { console.error("Error cargando leaderboard:", error); }
   };
 
-  // Cargar el ranking al iniciar el juego
-  useEffect(() => {
-    fetchLeaderboard();
-  }, []);
+  useEffect(() => { fetchLeaderboard(); }, []);
 
-  // --- Sistema de Récords ---
+  // --- 2. Revisar Récord al Perder ---
   const checkHighScores = useCallback((finalScore) => {
-    // Actualizamos récord personal local
     if (finalScore > localHighScore) {
       setLocalHighScore(finalScore);
       localStorage.setItem('byteHunterScore', finalScore.toString());
     }
-    
-    // Siempre mostramos el input si hiciste puntos, para intentar entrar al ranking global
-    if (finalScore > 0) {
-      setShowNameInput(true);
-    }
+    // Siempre permite guardar si hiciste puntos
+    if (finalScore > 0) setShowNameInput(true);
   }, [localHighScore]);
 
-  // --- 2. Guardar tu puntaje en Firebase ---
+  // --- 3. Guardar en la Nube ---
   const saveToLeaderboard = async () => {
-    if (playerName.trim() === '') return;
-    
+    if (playerName.trim() === '') { alert("¡Escribe un nombre!"); return; }
     try {
-      // Guardamos en la nube
-      await addDoc(collection(db, "scores"), {
-        name: playerName,
-        score: score,
-        date: new Date()
-      });
-      
-      // Recargamos el ranking para ver tu nombre ahí
+      await addDoc(collection(db, "scores"), { name: playerName, score: score, date: new Date() });
       await fetchLeaderboard();
-      
-      setShowNameInput(false);
-      setPlayerName('');
-      setGameState('menu');
-    } catch (error) {
-      console.error("Error guardando score:", error);
-      alert("Error de conexión. Intenta de nuevo.");
-    }
+      setShowNameInput(false); setPlayerName(''); setGameState('menu');
+    } catch (error) { alert("Error: " + error.message); }
   };
 
-  // --- EFECTOS DE JUEGO (Mecánica Intacta) ---
+  // --- LÓGICA DE JUEGO: Subir Nivel Instantáneo ---
   useEffect(() => {
     if (gameState === 'playing' && score >= targetTotalScore) {
       setLevel(prev => prev + 1);
-      setTimeLeft(30); 
+      setTimeLeft(30); // Reinicia reloj a 30s
     }
   }, [score, targetTotalScore, gameState]);
 
+  // --- LÓGICA DE JUEGO: Reloj Principal ---
   useEffect(() => {
     if (gameState !== 'playing') return;
     const timer = setInterval(() => {
@@ -112,6 +90,40 @@ function App() {
     return () => clearInterval(timer);
   }, [gameState, checkHighScores]);
 
+  // --- EVENTO ESPECIAL: Corazón Fugaz (Cada 60s, dura 4s) ---
+  useEffect(() => {
+    if (gameState !== 'playing') {
+      setShowHeart(false);
+      return;
+    }
+
+    const heartSpawner = setInterval(() => {
+      setShowHeart(true);
+      setHeartClicks(0);
+      
+      // Desaparece a los 4 segundos si no lo atrapas
+      setTimeout(() => {
+        setShowHeart(false);
+      }, 4000); 
+
+    }, 60000); // Aparece cada 1 minuto
+
+    return () => clearInterval(heartSpawner);
+  }, [gameState]);
+
+  // Click en el corazón
+  const handleHeartClick = (e) => {
+    e.stopPropagation(); 
+    const newClicks = heartClicks + 1;
+    setHeartClicks(newClicks);
+
+    if (newClicks >= 3) {
+      setIntegrity(prev => Math.min(100, prev + 10)); // Cura 10%
+      setShowHeart(false);
+    }
+  };
+
+  // --- Spawner de Enemigos ---
   const spawnRate = Math.max(250, 1000 - (level - 1) * 120); 
   useEffect(() => {
     if (gameState !== 'playing') return;
@@ -125,9 +137,11 @@ function App() {
     let type = 'virus'; 
     if (rand < 0.2) type = 'file'; 
     else if (rand < 0.35 && level >= 2) type = 'trojan'; 
+    
     const x = Math.random() * 80 + 10; 
     const y = Math.random() * 60 + 20; 
     setTargets((prev) => [...prev, { id, x, y, type }]);
+    
     const disappearTime = Math.max(800, 2500 - (level * 150));
     setTimeout(() => { setTargets((prev) => prev.filter((t) => t.id !== id)); }, disappearTime);
   };
@@ -153,14 +167,12 @@ function App() {
 
   const startGame = () => {
     setScore(0); setIntegrity(100); setTimeLeft(30); setLevel(1); setTargets([]);
-    setShowNameInput(false); setGameState('playing');
+    setShowHeart(false); setShowNameInput(false); setGameState('playing');
   };
 
   return (
     <div className="game-container">
-      {gameState === 'playing' && (
-        <div className="level-display"><div>NIVEL {level}</div></div>
-      )}
+      {gameState === 'playing' && <div className="level-display"><div>NIVEL {level}</div></div>}
 
       <header><h1>BYTE HUNTER 🛡️</h1></header>
       
@@ -181,6 +193,14 @@ function App() {
         {gameState === 'playing' && (
           <div className="game-board">
             {targets.map((target) => ( <Target key={target.id} {...target} onClick={handleTargetClick} /> ))}
+            
+            {/* CORAZÓN DE VIDA */}
+            {showHeart && (
+              <div className="recovery-heart" onMouseDown={handleHeartClick}>
+                ❤️
+                <span className="heart-clicks">{3 - heartClicks}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -188,28 +208,17 @@ function App() {
           <div className="menu">
             <h2>MANUAL DE OPERACIONES</h2>
             <div className="instructions-container">
-              <div className="instruction-item"><span className="icon">👾</span><p><strong>VIRUS:</strong> Elimínalos. <br/><span>+10 Puntos</span></p></div>
-              <div className="instruction-item"><span className="icon">📁</span><p><strong>ARCHIVO:</strong> No tocar. <br/><span>-15% Vida | -10 Puntos</span></p></div>
-              <div className="instruction-item"><span className="icon">⚠️</span><p><strong>TROYANO:</strong> Amenaza (Nivel 2+). <br/><span>-35% Vida | -50 Puntos</span></p></div>
+              <div className="instruction-item"><span className="icon">👾</span><p><strong>VIRUS:</strong> Elimínalos.<br/><span>+10 Puntos</span></p></div>
+              <div className="instruction-item"><span className="icon">📁</span><p><strong>ARCHIVO:</strong> No tocar.<br/><span>-15% Vida | -10 Puntos</span></p></div>
+              <div className="instruction-item"><span className="icon">❤️</span><p><strong>RECOVERY:</strong> ¡Fugaz (4s)!<br/><span>Click x3 = +10% Vida</span></p></div>
               <div className="mission-box"><p>Obtén <strong>150 puntos</strong> en <strong>30s</strong> para avanzar.</p></div>
             </div>
-            {/* Aquí mostramos tu récord personal local */}
             <p style={{fontSize:'0.8rem', color: '#888'}}>Mejor Personal: {localHighScore}</p>
             <button onClick={startGame} className="start-btn">INICIAR ESCANEO</button>
             
-            {/* LEADERBOARD MUNDIAL (Firebase) */}
             <div className="leaderboard-list">
               <h4 style={{borderBottom:'1px solid #00ff41', paddingBottom:'5px'}}>🌐 TOP MUNDIAL</h4>
-              {leaderboard.length > 0 ? (
-                leaderboard.map((entry, index) => (
-                  <div key={index} className="leaderboard-item">
-                    <span>{index + 1}. {entry.name}</span>
-                    <span>{entry.score} pts</span>
-                  </div>
-                ))
-              ) : (
-                <p style={{fontSize:'0.8rem'}}>Cargando datos...</p>
-              )}
+              {leaderboard.length > 0 ? leaderboard.map((e, i) => (<div key={i} className="leaderboard-item"><span>{i+1}. {e.name}</span><span>{e.score}</span></div>)) : <p>Cargando...</p>}
             </div>
           </div>
         )}
@@ -219,21 +228,17 @@ function App() {
             <h2 style={{ color: 'red' }}>CONEXIÓN PERDIDA</h2>
             {timeLeft === 0 ? <p style={{color: '#f1c40f'}}>TIEMPO AGOTADO.</p> : <p style={{color: '#ff4141'}}>SISTEMA DESTRUIDO.</p>}
             <h3>Puntos Totales: {score} | Nivel: {level}</h3>
-            
             {showNameInput ? (
               <div className="leaderboard-entry">
                 <p>¡REGISTRA TU PUNTAJE!</p>
                 <input className="name-input-field" type="text" placeholder="Tu Alias" value={playerName} onChange={(e) => setPlayerName(e.target.value)} maxLength={10} />
                 <button onClick={saveToLeaderboard}>ENVIAR</button>
               </div>
-            ) : (
-              <button onClick={startGame}>REINTENTAR</button>
-            )}
+            ) : <button onClick={startGame}>REINTENTAR</button>}
           </div>
         )}
       </main>
-
-      <footer className="game-footer"><p>Byte Hunter v8.0 (Online) | Desarrollado por JandryHub | 2026</p></footer>
+      <footer className="game-footer"><p>Byte Hunter v9.0 | 2026</p></footer>
     </div>
   );
 }

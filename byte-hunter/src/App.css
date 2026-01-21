@@ -18,7 +18,7 @@ body {
   padding-top: 10px;
 }
 
-/* --- Indicador de Nivel (Arriba Derecha) --- */
+/* --- Indicador de Nivel --- */
 .level-display {
   position: fixed;
   top: 20px;
@@ -102,7 +102,7 @@ body {
 .health-yellow { background: #f1c40f; box-shadow: 0 0 10px #f1c40f; }
 .health-red { background: #ff4141; box-shadow: 0 0 10px #ff4141; animation: blink 0.2s infinite; }
 
-/* --- Menús e Instrucciones (CORREGIDO) --- */
+/* --- Menús Centrados y Organizados --- */
 .menu {
   background: rgba(0, 0, 0, 0.95);
   border: 1px solid #00ff41;
@@ -112,6 +112,7 @@ body {
   width: 85%;
   z-index: 20;
   box-shadow: 0 0 30px rgba(0, 255, 65, 0.2);
+  margin: 20px auto; /* ESTO CENTRA EL MENÚ */
 }
 
 .instructions-container {
@@ -131,19 +132,10 @@ body {
   border-bottom: 1px solid rgba(0, 255, 65, 0.1);
   padding-bottom: 5px;
 }
-
 .instruction-item:last-child { border-bottom: none; }
-
 .instruction-item .icon { font-size: 1.8rem; }
-
-.instruction-item p {
-  margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.3;
-}
-
+.instruction-item p { margin: 0; font-size: 0.85rem; line-height: 1.3; }
 .instruction-item p strong { color: #00ff41; display: block; }
-
 .instruction-item span { color: #ff4141; font-size: 0.75rem; }
 
 .mission-box {
@@ -163,14 +155,12 @@ body {
   border: 1px dashed #00ff41;
   padding: 10px;
 }
-
 .leaderboard-item {
   display: flex;
   justify-content: space-between;
   border-bottom: 1px solid #333;
   padding: 5px 0;
 }
-
 .name-input-field {
   background: #000;
   border: 1px solid #fff;
@@ -178,11 +168,11 @@ body {
   padding: 8px;
   text-align: center;
   font-family: 'Courier New', monospace;
-  width: 70%;
-  margin-bottom: 10px;
+  width: 60%;
+  margin-right: 10px;
 }
 
-/* --- Footer Fijo --- */
+/* --- Footer --- */
 .game-footer {
   position: fixed;
   bottom: 0;
@@ -208,12 +198,7 @@ button {
   transition: all 0.2s;
   text-transform: uppercase;
 }
-
-button:hover { 
-  transform: scale(1.05); 
-  background: #fff; 
-  box-shadow: 0 0 15px #fff;
-}
+button:hover { transform: scale(1.05); background: #fff; box-shadow: 0 0 15px #fff; }
 
 /* --- Target Item --- */
 .target-item {
@@ -222,5 +207,45 @@ button:hover {
   cursor: pointer;
   transition: transform 0.05s;
 }
-
 .target-item:active { transform: scale(0.8) translate(-50%, -50%); }
+
+/* --- Bonus de Vida (Corazón Fugaz) --- */
+.recovery-heart {
+  position: absolute;
+  bottom: 15%; 
+  left: -50px; 
+  font-size: 3rem;
+  cursor: pointer;
+  z-index: 100;
+  /* Animación rápida de 4 segundos */
+  animation: flyAcross 4s linear forwards; 
+  user-select: none;
+  filter: drop-shadow(0 0 10px #ff0055);
+  transition: transform 0.1s;
+}
+
+.recovery-heart:active {
+  transform: scale(0.8); 
+}
+
+@keyframes flyAcross {
+  0% { left: -50px; }
+  100% { left: 110%; } 
+}
+
+.heart-clicks {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: white;
+  color: red;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  border: 1px solid red;
+}
