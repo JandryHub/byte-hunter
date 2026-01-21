@@ -1,18 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Target from './components/Target';
 import './App.css';
 
 function App() {
   // --- Estados del Juego ---
   const [gameState, setGameState] = useState('menu'); 
-  const [score, setScore] = useState(0);
+  const [score, setScore] = useState(0); // Puntaje TOTAL acumulado
   const [integrity, setIntegrity] = useState(100); 
-  const [timeLeft, setTimeLeft] = useState(60);
+  const [timeLeft, setTimeLeft] = useState(30); 
   const [targets, setTargets] = useState([]); 
   const [level, setLevel] = useState(1);
   
-  // META DE PUNTOS: Nivel 1 = 150, Nivel 2 = 300...
-  const targetScore = level * 150;
+  // CONFIGURACIÓN: Puntos necesarios para superar CADA nivel
+  const POINTS_PER_LEVEL = 150;
+  
+  // CÁLCULO INTELIGENTE:
+  // Meta Total = Nivel * 150 (Ej: Nivel 1=150, Nivel 2=300)
+  const targetTotalScore = level * POINTS_PER_LEVEL;
+  
+  // Progreso en el nivel actual (Para que siempre empiece en 0 visualmente)
+  // Ej: Si tienes 160 pts y estás en Nivel 2, tu progreso es 10 pts.
+  const currentLevelProgress = score - ((level - 1) * POINTS_PER_LEVEL);
+
+  // Ref para acceso seguro en timers
+  const scoreRef = useRef(score);
+  useEffect(() => { scoreRef.current = score; }, [score]);
 
   // --- Persistencia ---
   const [highScore, setHighScore] = useState(
@@ -36,61 +48,51 @@ function App() {
     }
   }, [highScore, leaderboard]);
 
-  // --- EFECTO 1: EL RELOJ (Solo baja el tiempo) ---
+  // --- EFECTO 1: SUBIR DE NIVEL (Instantáneo) ---
   useEffect(() => {
-    if (gameState !== 'playing') return;
-
-    const timer = setInterval(() => {
-      setTimeLeft(prev => prev > 0 ? prev - 1 : 0);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [gameState]);
-
-  // --- EFECTO 2: LÓGICA DE NIVEL (Se activa cuando el tiempo cambia) ---
-  useEffect(() => {
-    if (timeLeft === 0 && gameState === 'playing') {
-      // Verificamos si cumplió la meta
-      if (score >= targetScore) {
-        // ¡NIVEL SUPERADO!
-        setLevel(prev => prev + 1); // Sube 1 nivel exactamente
-        setTimeLeft(60);            // Reinicia reloj
-      } else {
-        // GAME OVER
-        setGameState('gameover');
-        checkHighScores(score);
-      }
+    if (gameState === 'playing' && score >= targetTotalScore) {
+      setLevel(prev => prev + 1);
+      setTimeLeft(30); // Reinicia tiempo
+      // Nota: No reiniciamos 'score' porque es el acumulado para el Récord
     }
-  }, [timeLeft, gameState, score, targetScore, checkHighScores]);
+  }, [score, targetTotalScore, gameState]);
 
-  // --- EFECTO 3: GENERADOR DE VIRUS (Spawner) ---
-  // La velocidad depende del nivel
-  const spawnRate = Math.max(250, 1000 - (level - 1) * 120); 
-
+  // --- EFECTO 2: RELOJ ---
   useEffect(() => {
     if (gameState !== 'playing') return;
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          setGameState('gameover');
+          checkHighScores(scoreRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [gameState, checkHighScores]);
 
-    const spawner = setInterval(() => {
-      spawnTarget();
-    }, spawnRate);
-
+  // --- EFECTO 3: SPAWNER ---
+  const spawnRate = Math.max(250, 1000 - (level - 1) * 120); 
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    const spawner = setInterval(() => { spawnTarget(); }, spawnRate);
     return () => clearInterval(spawner);
-  }, [gameState, spawnRate, level]); // Se reinicia solo si cambia el nivel
+  }, [gameState, spawnRate, level]);
 
-  // --- Funciones de Mecánica ---
+  // --- Mecánicas ---
   const spawnTarget = () => {
     const id = Date.now();
     const rand = Math.random();
-    
     let type = 'virus'; 
     if (rand < 0.2) type = 'file'; 
     else if (rand < 0.35 && level >= 2) type = 'trojan'; 
 
     const x = Math.random() * 80 + 10; 
     const y = Math.random() * 60 + 20; 
-
     setTargets((prev) => [...prev, { id, x, y, type }]);
-
+    
     const disappearTime = Math.max(800, 2500 - (level * 150));
     setTimeout(() => {
       setTargets((prev) => prev.filter((t) => t.id !== id));
@@ -99,10 +101,8 @@ function App() {
 
   const handleTargetClick = (id, type) => {
     setTargets((prev) => prev.filter((t) => t.id !== id));
-
-    if (type === 'virus') {
-      setScore(prev => prev + 10);
-    } else if (type === 'file') {
+    if (type === 'virus') setScore(prev => prev + 10);
+    else if (type === 'file') {
       setScore(prev => Math.max(0, prev - 10));
       updateIntegrity(15);
     } else if (type === 'trojan') {
@@ -116,7 +116,7 @@ function App() {
       const newIntegrity = prev - damage;
       if (newIntegrity <= 0) {
         setGameState('gameover');
-        checkHighScores(score);
+        checkHighScores(scoreRef.current);
         return 0;
       }
       return newIntegrity;
@@ -124,38 +124,24 @@ function App() {
   };
 
   const startGame = () => {
-    setScore(0);
-    setIntegrity(100);
-    setTimeLeft(60);
-    setLevel(1);
-    setTargets([]);
-    setShowNameInput(false);
-    setGameState('playing');
+    setScore(0); setIntegrity(100); setTimeLeft(30); setLevel(1); setTargets([]);
+    setShowNameInput(false); setGameState('playing');
   };
 
   const saveToLeaderboard = () => {
     if (playerName.trim() === '') return;
     const newEntry = { name: playerName, score: score };
-    const updated = [...leaderboard, newEntry]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-    
+    const updated = [...leaderboard, newEntry].sort((a, b) => b.score - a.score).slice(0, 5);
     setLeaderboard(updated);
     localStorage.setItem('byteHunterLeaderboard', JSON.stringify(updated));
-    setShowNameInput(false);
-    setPlayerName('');
-    setGameState('menu'); 
+    setShowNameInput(false); setPlayerName(''); setGameState('menu'); 
   };
 
   return (
     <div className="game-container">
-      {/* HUD Superior Derecha */}
       {gameState === 'playing' && (
         <div className="level-display">
           <div>NIVEL {level}</div>
-          <div style={{fontSize: '0.8rem', color: score >= targetScore ? '#00ff41' : '#fff', marginTop: '5px'}}>
-            META: {targetScore} PTS
-          </div>
         </div>
       )}
 
@@ -165,9 +151,9 @@ function App() {
       
       <div className="stats">
         <div className="stats-info">
-          {/* El score cambia a verde cuando pasas la meta */}
-          <span style={{ color: score >= targetScore ? '#00ff41' : 'white', transition: 'color 0.3s' }}>
-            PUNTOS: {score} / {targetScore}
+          {/* AQUÍ EL CAMBIO: Muestra progreso relativo (0/150) */}
+          <span style={{ color: currentLevelProgress >= POINTS_PER_LEVEL ? '#00ff41' : 'white' }}>
+            PROGRESO: {currentLevelProgress} / {POINTS_PER_LEVEL}
           </span>
           <span className={timeLeft <= 10 ? 'timer-warning' : ''}>
             TIEMPO: {timeLeft}s
@@ -175,10 +161,7 @@ function App() {
         </div>
         
         <div className="health-bar-container">
-          <div 
-            className={`health-bar-fill ${integrity > 50 ? 'health-green' : integrity > 20 ? 'health-yellow' : 'health-red'}`}
-            style={{ width: `${integrity}%` }}
-          ></div>
+          <div className={`health-bar-fill ${integrity > 50 ? 'health-green' : integrity > 20 ? 'health-yellow' : 'health-red'}`} style={{ width: `${integrity}%` }}></div>
         </div>
         <span className="integrity-text">INTEGRIDAD: {integrity}%</span>
       </div>
@@ -194,39 +177,42 @@ function App() {
 
         {gameState === 'menu' && (
           <div className="menu">
-            <h2>Misión: Purga de Sistema</h2>
-            <p>Alcanza la META de puntos antes de que acabe el tiempo.</p>
-            <p>👾 Virus (+10) | 📁 Archivo (-Vida)</p>
-            <p>⚠️ Troyano (DANGER - Nivel 2+)</p>
-            <button onClick={startGame}>INICIAR ESCANEO</button>
+            <h2>MANUAL DE OPERACIONES</h2>
+            <div className="instructions-container">
+              <div className="instruction-item">
+                <span className="icon">👾</span>
+                <p><strong>VIRUS:</strong> Elimínalos. <br/> <span>+10 Puntos</span></p>
+              </div>
+              <div className="instruction-item">
+                <span className="icon">📁</span>
+                <p><strong>ARCHIVO:</strong> No tocar. <br/> <span>-15% Vida | -10 Puntos</span></p>
+              </div>
+              <div className="instruction-item">
+                <span className="icon">⚠️</span>
+                <p><strong>TROYANO:</strong> Amenaza (Nivel 2+). <br/> <span>-35% Vida | -50 Puntos</span></p>
+              </div>
+              <div className="mission-box">
+                <p>Obtén <strong>150 puntos</strong> en menos de <strong>30s</strong> para avanzar de nivel.</p>
+              </div>
+            </div>
+            <button onClick={startGame} className="start-btn">INICIAR ESCANEO</button>
           </div>
         )}
 
         {gameState === 'gameover' && (
           <div className="menu">
-            <h2 style={{ color: 'red' }}>CONEXIÓN FINALIZADA</h2>
-            
-            {/* Mensaje dinámico según la causa de muerte */}
-            {timeLeft === 0 && score < targetScore ? (
-                <p style={{color: '#f1c40f'}}>TIEMPO AGOTADO: No alcanzaste la meta de datos.</p>
+            <h2 style={{ color: 'red' }}>CONEXIÓN PERDIDA</h2>
+            {timeLeft === 0 ? (
+                <p style={{color: '#f1c40f'}}>TIEMPO AGOTADO: Cuota no alcanzada.</p>
             ) : (
-                <p style={{color: '#ff4141'}}>FALLO DE INTEGRIDAD: El sistema colapsó.</p>
+                <p style={{color: '#ff4141'}}>FALLO DE INTEGRIDAD: Sistema destruido.</p>
             )}
-
-            <h3>Puntos Finales: {score}</h3>
-            <p>Nivel Alcanzado: {level}</p>
+            <h3>Puntos Totales: {score} | Nivel: {level}</h3>
             
             {showNameInput ? (
               <div className="leaderboard-entry">
                 <p>¡NUEVO RÉCORD TOP 5!</p>
-                <input 
-                  className="name-input-field" 
-                  type="text" 
-                  placeholder="Tu Alias" 
-                  value={playerName} 
-                  onChange={(e) => setPlayerName(e.target.value)} 
-                  maxLength={10} 
-                />
+                <input className="name-input-field" type="text" placeholder="Tu Alias" value={playerName} onChange={(e) => setPlayerName(e.target.value)} maxLength={10} />
                 <button onClick={saveToLeaderboard}>REGISTRAR</button>
               </div>
             ) : (
@@ -239,7 +225,7 @@ function App() {
       </main>
 
       <footer className="game-footer">
-        <p>Byte Hunter v5.0 | Desarrollado por JandryHub | 2026</p>
+        <p>Byte Hunter v7.0 | Desarrollado por JandryHub | 2026</p>
       </footer>
     </div>
   );
