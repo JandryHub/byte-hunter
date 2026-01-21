@@ -4,6 +4,15 @@ import './App.css';
 import { db } from './firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
+// Referencias de audio
+const soundRefs = {
+  virus: new Audio('/sounds/virus.wav'),
+  trojan: new Audio('/sounds/trojan.wav'),
+  file: new Audio('/sounds/file.wav'),
+  levelup: new Audio('/sounds/levelup.wav'),
+  gameover: new Audio('/sounds/gameover.wav')
+};
+
 function App() {
   // --- Estados del Juego ---
   const [gameState, setGameState] = useState('menu'); 
@@ -16,6 +25,19 @@ function App() {
   // --- Estados del Corazón de Vida ---
   const [showHeart, setShowHeart] = useState(false);
   const [heartClicks, setHeartClicks] = useState(0);
+
+  // --- Función para reproducir sonidos ---
+  const playSound = useCallback((soundType) => {
+    try {
+      const audio = soundRefs[soundType];
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play().catch(err => console.log('Error reproduciendo sonido:', err));
+      }
+    } catch (error) {
+      console.log('Error con sonido:', error);
+    }
+  }, []);
   
   // --- Lógica de Puntos y Nivel ---
   const POINTS_PER_LEVEL = 150;
@@ -71,8 +93,9 @@ function App() {
     if (gameState === 'playing' && score >= targetTotalScore) {
       setLevel(prev => prev + 1);
       setTimeLeft(30); // Reinicia reloj a 30s
+      playSound('levelup'); // Sonido de nivel subido
     }
-  }, [score, targetTotalScore, gameState]);
+  }, [score, targetTotalScore, gameState, playSound]);
 
   // --- LÓGICA DE JUEGO: Reloj Principal ---
   useEffect(() => {
@@ -81,6 +104,7 @@ function App() {
       setTimeLeft(prev => {
         if (prev <= 1) {
           setGameState('gameover');
+          playSound('gameover');
           checkHighScores(scoreRef.current);
           return 0;
         }
@@ -88,7 +112,7 @@ function App() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [gameState, checkHighScores]);
+  }, [gameState, checkHighScores, playSound]);
 
   // --- EVENTO ESPECIAL: Corazón Fugaz (Cada 60s, dura 4s) ---
   useEffect(() => {
@@ -148,9 +172,22 @@ function App() {
 
   const handleTargetClick = (id, type) => {
     setTargets((prev) => prev.filter((t) => t.id !== id));
-    if (type === 'virus') setScore(prev => prev + 10);
-    else if (type === 'file') { setScore(prev => Math.max(0, prev - 10)); updateIntegrity(15); }
-    else if (type === 'trojan') { setScore(prev => Math.max(0, prev - 50)); updateIntegrity(35); }
+    
+    // Reproducir sonido según tipo
+    if (type === 'virus') {
+      setScore(prev => prev + 10);
+      playSound('virus');
+    }
+    else if (type === 'file') { 
+      setScore(prev => Math.max(0, prev - 10)); 
+      updateIntegrity(15);
+      playSound('file');
+    }
+    else if (type === 'trojan') { 
+      setScore(prev => Math.max(0, prev - 50)); 
+      updateIntegrity(35);
+      playSound('trojan');
+    }
   };
 
   const updateIntegrity = (damage) => {
@@ -158,6 +195,7 @@ function App() {
       const newIntegrity = prev - damage;
       if (newIntegrity <= 0) {
         setGameState('gameover');
+        playSound('gameover');
         checkHighScores(scoreRef.current);
         return 0;
       }
