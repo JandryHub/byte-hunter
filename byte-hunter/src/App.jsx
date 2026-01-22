@@ -6,7 +6,7 @@ import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/fir
 
 function App() {
   // --- Estados del Juego ---
-  const [gameState, setGameState] = useState('menu'); 
+  const [gameState, setGameState] = useState('tutorial'); 
   const [score, setScore] = useState(0); 
   const [integrity, setIntegrity] = useState(100); 
   const [timeLeft, setTimeLeft] = useState(30); 
@@ -183,22 +183,18 @@ function App() {
     const x = Math.random() * 80 + 10; 
     const y = Math.random() * 60 + 20; 
     
-    // IMPORTANTE: isHit en false al crear
     setTargets((prev) => [...prev, { id, x, y, type, isHit: false }]);
     
     const disappearTime = Math.max(800, 2500 - (level * 150));
     setTimeout(() => { 
-      // Solo borrar si NO ha sido golpeado (si fue golpeado, se encarga el otro efecto)
       setTargets((prev) => prev.filter((t) => t.id !== id && !t.isHit)); 
     }, disappearTime);
   };
 
   // --- LÓGICA DE CLIC (CON ANIMACIÓN DE EXPLOSIÓN) ---
   const handleTargetClick = (id, type) => {
-    // 1. Marcar como golpeado (activa animación CSS)
     setTargets(prev => prev.map(t => t.id === id ? { ...t, isHit: true } : t));
 
-    // 2. Puntos y sonido inmediatos
     if (type === 'virus') {
       setScore(prev => prev + 10);
       playSound('virus'); 
@@ -212,7 +208,6 @@ function App() {
       playSound('trojan'); 
     }
 
-    // 3. Borrar tras 0.5s (fin de animación)
     setTimeout(() => {
       setTargets(prev => prev.filter(t => t.id !== id));
     }, 500);
@@ -246,7 +241,6 @@ function App() {
       
       <div className="stats">
         <div className="stats-info">
-          {/* --- AQUÍ ESTÁ EL SCORE GENERAL QUE FALTABA --- */}
           <span className="total-score-display">SCORE: {score}</span>
           <span className="separator">|</span>
           <span style={{ color: currentLevelProgress >= POINTS_PER_LEVEL ? '#00ff41' : 'white' }}>
@@ -264,7 +258,6 @@ function App() {
       <main className="game-wrapper">
         {gameState === 'playing' && (
           <div className="game-board">
-            {/* Targets con soporte de toque móvil y partículas */}
             {targets.map((target) => ( <Target key={target.id} {...target} onClick={handleTargetClick} /> ))}
             
             {showHeart && (
@@ -275,21 +268,85 @@ function App() {
           </div>
         )}
 
+        {/* --- PANTALLA 1: TUTORIAL / INFORME --- */}
+        {gameState === 'tutorial' && (
+          <div className="menu tutorial-window">
+            <h2 style={{borderBottom: '2px solid #00ff41', paddingBottom: '10px'}}>INFORME DE MISIÓN</h2>
+            
+            {/* 1. PRIMERO EL OBJETIVO (META) */}
+            <div className="mission-box" style={{marginBottom: '20px'}}>
+              <p> <strong>OBJETIVO:</strong> Sumar <strong>150 puntos</strong> antes de que acaben los <strong>30s</strong>.</p>
+              <hr style={{borderColor: '#00ff41', opacity: 0.3, margin: '8px 0'}}/>
+              <p style={{fontSize: '0.8rem', color: '#ddd'}}>
+                 <strong>DERROTA SI:</strong> El Tiempo llega a 0s <span style={{color:'#555'}}>|</span> La Integridad cae a 0%
+              </p>
+            </div>
+
+            {/* 2. LUEGO EL INFORME DE ITEMS */}
+            <div className="tutorial-grid">
+              
+              <div className="tutorial-item good">
+                <span className="t-icon">👾</span>
+                <div className="t-desc">
+                  <strong>VIRUS</strong>
+                  <p>Destrúyelos.</p>
+                  <span>+10 Puntos</span>
+                </div>
+              </div>
+
+              <div className="tutorial-item bad">
+                <span className="t-icon">📁</span>
+                <div className="t-desc">
+                  <strong>ARCHIVO</strong>
+                  <p>NO TOCAR.</p>
+                  <span>-15% Vida</span>
+                </div>
+              </div>
+
+              <div className="tutorial-item bad">
+                <span className="t-icon">⚠️</span>
+                <div className="t-desc">
+                  <strong>TROYANO</strong>
+                  <p>Amenaza (Nv 2+)</p>
+                  <span>-35% Vida</span>
+                </div>
+              </div>
+
+              <div className="tutorial-item heal">
+                <span className="t-icon">❤️</span>
+                <div className="t-desc">
+                  <strong>RECOVERY</strong>
+                  <p>Click x3</p>
+                  <span>+10% Vida</span>
+                </div>
+              </div>
+
+            </div>
+            
+            <button className="ready-btn" onClick={() => setGameState('menu')}>
+               ENTENDIDO
+            </button>
+          </div>
+        )}
+
+        {/* --- PANTALLA 2: MENÚ PRINCIPAL --- */}
         {gameState === 'menu' && (
           <div className="menu">
-            <h2>MANUAL DE OPERACIONES</h2>
-            <div className="instructions-container">
-              <div className="instruction-item"><span className="icon">👾</span><p><strong>VIRUS:</strong> Elimínalos.<br/><span>+10 Puntos</span></p></div>
-              <div className="instruction-item"><span className="icon">📁</span><p><strong>ARCHIVO:</strong> No tocar.<br/><span>-15% Vida | -10 Puntos</span></p></div>
-              <div className="instruction-item"><span className="icon">❤️</span><p><strong>RECOVERY:</strong> Lento (10s).<br/><span>Click x3 = +10% Vida</span></p></div>
-              <div className="mission-box"><p>Obtén <strong>150 puntos</strong> en <strong>30s</strong> para avanzar.</p></div>
+            <h2>SISTEMA LISTO</h2>
+            
+            {/* Recordatorio breve */}
+            <div className="mission-box">
+              <p style={{fontSize:'0.9rem'}}> Todo listo para iniciar el escaneo. 👍👍</p>
             </div>
-            <p style={{fontSize:'0.8rem', color: '#888'}}>Mejor Personal: {localHighScore}</p>
-            <button onClick={startGame} className="start-btn">INICIAR ESCANEO</button>
+            
+            <button onClick={startGame} className="ready-btn">INICIAR ESCANEO</button>
+            
             <div className="leaderboard-list">
               <h4 style={{borderBottom:'1px solid #00ff41', paddingBottom:'5px'}}>🌐 TOP MUNDIAL</h4>
               {leaderboard.length > 0 ? leaderboard.map((e, i) => (<div key={i} className="leaderboard-item"><span>{i+1}. {e.name}</span><span>{e.score}</span></div>)) : <p>Cargando...</p>}
             </div>
+
+            <button style={{marginTop:'10px', fontSize:'0.8rem', padding:'8px'}} onClick={() => setGameState('tutorial')}>❓ Ver Informe</button>
           </div>
         )}
 
@@ -308,7 +365,7 @@ function App() {
           </div>
         )}
       </main>
-      <footer className="game-footer"><p>Byte Hunter v11.0 | 2026</p></footer>
+      <footer className="game-footer"><p>Byte Hunter v12.1 (Briefing Update) | 2026</p></footer>
     </div>
   );
 }

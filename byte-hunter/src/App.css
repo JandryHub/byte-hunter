@@ -4,7 +4,7 @@ body {
   background-color: #0a0a12;
   color: #00ff41;
   font-family: 'Courier New', monospace;
-  overflow: hidden;
+  overflow: hidden; /* En PC fijo, en móvil se desbloquea abajo */
   user-select: none;
 }
 
@@ -161,6 +161,75 @@ body {
   color: #fff;
 }
 
+/* --- ESTILOS DEL NUEVO TUTORIAL --- */
+.tutorial-window {
+  max-width: 600px;
+}
+
+.tutorial-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Dos columnas en PC */
+  gap: 15px;
+  margin: 20px 0;
+  text-align: left;
+}
+
+.tutorial-item {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #333;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.t-icon {
+  font-size: 2.5rem;
+  margin-right: 15px;
+}
+
+.t-desc strong {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 2px;
+}
+
+.t-desc p {
+  font-size: 0.8rem;
+  color: #ccc;
+  margin: 0;
+}
+
+.t-desc span {
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Colores Tutorial */
+.good strong, .good span { color: #00ff41; }
+.bad strong, .bad span { color: #ff4141; }
+.heal strong, .heal span { color: #f1c40f; }
+
+.ready-btn {
+  background: #4bf83b;
+  color: #000;
+  width: 100%;
+  font-size: 1.2rem;
+  padding: 15px;
+  border: 2px solid #72f793;
+  box-shadow: 0 0 15px #00ff41;
+  animation: pulseReady 1.5s infinite;
+  cursor: pointer;
+  font-weight: bold;
+  margin-top: 15px;
+}
+
+@keyframes pulseReady {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); box-shadow: 0 0 25px #00ff41; }
+  100% { transform: scale(1); }
+}
+
 /* --- Leaderboard --- */
 .leaderboard-list {
   text-align: left;
@@ -198,7 +267,7 @@ body {
   z-index: 100;
 }
 
-/* --- Botones --- */
+/* --- Botones Genéricos --- */
 button {
   background: #00ff41;
   color: #000;
@@ -294,68 +363,75 @@ button:hover { transform: scale(1.05); background: #fff; box-shadow: 0 0 15px #f
     0% { opacity: 1; transform: scale(1); }
     100% { opacity: 0; transform: scale(3); }
 }
-/* --- ADAPTACIÓN MÓVIL (RESPONSIVE) --- */
 
-/* 1. Bloquear gestos molestos del navegador */
+/* --- ADAPTACIÓN MÓVIL (RESPONSIVE FINAL) --- */
+
+/* 1. Permitimos scroll en el cuerpo de la página en móvil */
 html, body {
-  touch-action: none; /* Bloquea zoom y scroll mientras juegas */
-  overscroll-behavior: none; /* Evita el efecto de rebote en iPhone */
+  overflow-y: auto !important; /* Fuerza el scroll vertical */
+  touch-action: pan-y; /* Permite deslizar arriba/abajo */
+  height: 100%;
 }
 
-/* 2. Ajustes para pantallas menores a 600px (Celulares) */
 @media (max-width: 600px) {
   
-  /* Título más pequeño para que no ocupe media pantalla */
+  /* 2. El contenedor principal empuja todo hacia abajo */
+  .game-container {
+    padding-top: 50px; /* BAJAMOS TODO 50px */
+    padding-bottom: 80px; /* Espacio para que el footer no tape nada */
+    height: auto; 
+    min-height: 100vh;
+    justify-content: flex-start;
+  }
+
   h1 {
-    font-size: 2rem; 
-    margin: 10px 0;
+    font-size: 1.8rem;
+    margin: 0 0 10px 0;
   }
 
-  /* El tablero ocupa más altura vertical */
+  /* 3. Ajustes del Tablero */
   .game-board {
-    height: 70vh; 
-    width: 95%; /* Casi todo el ancho */
+    height: 60vh;
+    width: 95%;
+    margin-top: 10px;
+    /* Bloquea scroll SOLO dentro del tablero para jugar cómodo */
+    touch-action: none; 
   }
 
-  /* Estadísticas más compactas */
+  /* 4. Ajustes Stats */
   .stats-info {
     font-size: 0.9rem;
-    gap: 8px;
-    flex-wrap: wrap; /* Si no caben, que bajen de línea */
+    gap: 10px;
+    width: 90%;
+    flex-wrap: wrap;
+    justify-content: center;
   }
   
   .total-score-display {
-    font-size: 1.1rem;
-    width: 100%; /* El score ocupa su propia línea arriba */
+    width: 100%;
     text-align: center;
     border-bottom: 1px solid #333;
     padding-bottom: 5px;
     margin-bottom: 5px;
   }
 
-  /* Menú que ocupe toda la pantalla para leer bien */
+  /* 5. Ajustes Menú y Tutorial */
   .menu {
     width: 90%;
-    padding: 15px;
-    max-height: 80vh;
-    overflow-y: auto; /* Scroll si el menú es muy largo */
+    margin-top: 20px;
+    position: relative; 
+    top: auto; 
+    transform: none;
+  }
+  
+  /* Hacemos que el tutorial sea de una columna en celular */
+  .tutorial-grid {
+    grid-template-columns: 1fr;
   }
 
-  /* Botones más grandes para dedos gordos */
-  button {
-    padding: 15px 30px;
-    font-size: 1.2rem;
-    width: 100%;
-  }
-
-  /* Objetivos más grandes */
-  .target-item {
-    font-size: 50px !important; /* Forzamos tamaño grande */
-  }
-
-  /* Footer pequeño para que no estorbe */
   .game-footer {
-    font-size: 0.6rem;
-    padding: 5px;
+    position: relative; /* Ya no fijo, para que baje con el scroll */
+    margin-top: 20px;
+    padding: 15px;
   }
 }
