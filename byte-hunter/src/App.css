@@ -61,7 +61,7 @@ body {
   cursor: crosshair;
 }
 
-/* --- Stats --- */
+/* --- Stats y Score --- */
 .stats {
   display: flex;
   flex-direction: column;
@@ -73,9 +73,22 @@ body {
 
 .stats-info {
   display: flex;
-  gap: 30px;
-  font-size: 1.2rem;
+  gap: 15px;
+  font-size: 1.1rem;
   font-weight: bold;
+  align-items: center;
+  justify-content: center;
+}
+
+.total-score-display {
+  color: #f1c40f; /* Dorado */
+  text-shadow: 0 0 10px #f1c40f;
+  font-size: 1.3rem;
+}
+
+.separator {
+  color: #555;
+  font-weight: lighter;
 }
 
 .timer-warning {
@@ -102,7 +115,7 @@ body {
 .health-yellow { background: #f1c40f; box-shadow: 0 0 10px #f1c40f; }
 .health-red { background: #ff4141; box-shadow: 0 0 10px #ff4141; animation: blink 0.2s infinite; }
 
-/* --- Menús Centrados y Organizados --- */
+/* --- Menús Centrados --- */
 .menu {
   background: rgba(0, 0, 0, 0.95);
   border: 1px solid #00ff41;
@@ -112,7 +125,7 @@ body {
   width: 85%;
   z-index: 20;
   box-shadow: 0 0 30px rgba(0, 255, 65, 0.2);
-  margin: 20px auto; /* ESTO CENTRA EL MENÚ */
+  margin: 20px auto; 
 }
 
 .instructions-container {
@@ -200,16 +213,7 @@ button {
 }
 button:hover { transform: scale(1.05); background: #fff; box-shadow: 0 0 15px #fff; }
 
-/* --- Target Item --- */
-.target-item {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  cursor: pointer;
-  transition: transform 0.05s;
-}
-.target-item:active { transform: scale(0.8) translate(-50%, -50%); }
-
-/* --- Bonus de Vida (Corazón Fugaz) --- */
+/* --- Bonus de Vida (Corazón) --- */
 .recovery-heart {
   position: absolute;
   bottom: 15%; 
@@ -217,16 +221,13 @@ button:hover { transform: scale(1.05); background: #fff; box-shadow: 0 0 15px #f
   font-size: 3rem;
   cursor: pointer;
   z-index: 100;
-  /* Animación rápida de 4 segundos */
-  animation: flyAcross 4s linear forwards; 
+  animation: flyAcross 10s linear forwards; 
   user-select: none;
   filter: drop-shadow(0 0 10px #ff0055);
   transition: transform 0.1s;
 }
 
-.recovery-heart:active {
-  transform: scale(0.8); 
-}
+.recovery-heart:active { transform: scale(0.8); }
 
 @keyframes flyAcross {
   0% { left: -50px; }
@@ -248,4 +249,113 @@ button:hover { transform: scale(1.05); background: #fff; box-shadow: 0 0 15px #f
   justify-content: center;
   font-weight: bold;
   border: 1px solid red;
+}
+
+/* --- Animación de Fragmentación (Partículas) --- */
+.target-exploding {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: repeat(3, 10px);
+  grid-template-rows: repeat(3, 10px);
+  gap: 2px;
+  z-index: 45;
+}
+
+.particle-bit {
+  width: 10px; height: 10px;
+  background-color: #00ff41;
+  box-shadow: 0 0 5px #00ff41;
+  animation: fragmentation 0.5s ease-out forwards;
+}
+
+.target-exploding.bad-target .particle-bit {
+  background-color: #ff4141;
+  box-shadow: 0 0 5px #ff4141;
+}
+
+.particle-bit:nth-child(1) { --dx: -1; --dy: -1; }
+.particle-bit:nth-child(2) { --dx:  0; --dy: -1; }
+.particle-bit:nth-child(3) { --dx:  1; --dy: -1; }
+.particle-bit:nth-child(4) { --dx: -1; --dy:  0; }
+.particle-bit:nth-child(5) { --dx:  0; --dy:  0; animation-name: fadeCenter; }
+.particle-bit:nth-child(6) { --dx:  1; --dy:  0; }
+.particle-bit:nth-child(7) { --dx: -1; --dy:  1; }
+.particle-bit:nth-child(8) { --dx:  0; --dy:  1; }
+.particle-bit:nth-child(9) { --dx:  1; --dy:  1; }
+
+@keyframes fragmentation {
+  0% { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(calc(var(--dx) * 50px), calc(var(--dy) * 50px)) scale(0); opacity: 0; }
+}
+
+@keyframes fadeCenter {
+    0% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(3); }
+}
+/* --- ADAPTACIÓN MÓVIL (RESPONSIVE) --- */
+
+/* 1. Bloquear gestos molestos del navegador */
+html, body {
+  touch-action: none; /* Bloquea zoom y scroll mientras juegas */
+  overscroll-behavior: none; /* Evita el efecto de rebote en iPhone */
+}
+
+/* 2. Ajustes para pantallas menores a 600px (Celulares) */
+@media (max-width: 600px) {
+  
+  /* Título más pequeño para que no ocupe media pantalla */
+  h1 {
+    font-size: 2rem; 
+    margin: 10px 0;
+  }
+
+  /* El tablero ocupa más altura vertical */
+  .game-board {
+    height: 70vh; 
+    width: 95%; /* Casi todo el ancho */
+  }
+
+  /* Estadísticas más compactas */
+  .stats-info {
+    font-size: 0.9rem;
+    gap: 8px;
+    flex-wrap: wrap; /* Si no caben, que bajen de línea */
+  }
+  
+  .total-score-display {
+    font-size: 1.1rem;
+    width: 100%; /* El score ocupa su propia línea arriba */
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+  }
+
+  /* Menú que ocupe toda la pantalla para leer bien */
+  .menu {
+    width: 90%;
+    padding: 15px;
+    max-height: 80vh;
+    overflow-y: auto; /* Scroll si el menú es muy largo */
+  }
+
+  /* Botones más grandes para dedos gordos */
+  button {
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    width: 100%;
+  }
+
+  /* Objetivos más grandes */
+  .target-item {
+    font-size: 50px !important; /* Forzamos tamaño grande */
+  }
+
+  /* Footer pequeño para que no estorbe */
+  .game-footer {
+    font-size: 0.6rem;
+    padding: 5px;
+  }
 }

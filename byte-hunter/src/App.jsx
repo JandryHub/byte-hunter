@@ -4,15 +4,6 @@ import './App.css';
 import { db } from './firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
-// Referencias de audio
-const soundRefs = {
-  virus: new Audio('/sounds/virus.wav'),
-  trojan: new Audio('/sounds/trojan.wav'),
-  file: new Audio('/sounds/file.wav'),
-  levelup: new Audio('/sounds/levelup.wav'),
-  gameover: new Audio('/sounds/gameover.wav')
-};
-
 function App() {
   // --- Estados del Juego ---
   const [gameState, setGameState] = useState('menu'); 
@@ -26,29 +17,68 @@ function App() {
   const [showHeart, setShowHeart] = useState(false);
   const [heartClicks, setHeartClicks] = useState(0);
 
-  // --- Función para reproducir sonidos ---
-  const playSound = useCallback((soundType) => {
-    try {
-      const audio = soundRefs[soundType];
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play().catch(err => console.log('Error reproduciendo sonido:', err));
-      }
-    } catch (error) {
-      console.log('Error con sonido:', error);
+  // --- 🔊 MOTOR DE AUDIO (SINTETIZADOR) ---
+  const playSound = useCallback((type) => {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    const now = ctx.currentTime;
+
+    if (type === 'virus') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    } 
+    else if (type === 'file' || type === 'trojan') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, now);
+      osc.frequency.linearRampToValueAtTime(50, now + 0.3);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    }
+    else if (type === 'levelup') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, now);       
+      osc.frequency.setValueAtTime(554, now + 0.1); 
+      osc.frequency.setValueAtTime(659, now + 0.2); 
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.6);
+      osc.start(now);
+      osc.stop(now + 0.6);
+    }
+    else if (type === 'gameover') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(300, now);
+      osc.frequency.exponentialRampToValueAtTime(10, now + 1);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.linearRampToValueAtTime(0, now + 1);
+      osc.start(now);
+      osc.stop(now + 1);
     }
   }, []);
   
   // --- Lógica de Puntos y Nivel ---
   const POINTS_PER_LEVEL = 150;
   const targetTotalScore = level * POINTS_PER_LEVEL;
-  const currentLevelProgress = score - ((level - 1) * POINTS_PER_LEVEL);
+  const currentLevelProgress = Math.max(0, score - ((level - 1) * POINTS_PER_LEVEL));
 
-  // Referencia para usar score dentro de intervalos sin perder valor
   const scoreRef = useRef(score);
   useEffect(() => { scoreRef.current = score; }, [score]);
 
-  // --- Estados de Datos (Firebase & Local) ---
+  // --- Datos y Leaderboard ---
   const [localHighScore, setLocalHighScore] = useState(
     parseInt(localStorage.getItem('byteHunterScore')) || 0
   );
@@ -56,31 +86,26 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [showNameInput, setShowNameInput] = useState(false);
 
-  // --- 1. Cargar Ranking Mundial (Firebase) ---
   const fetchLeaderboard = async () => {
     try {
       const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(5));
       const querySnapshot = await getDocs(q);
-      const scores = querySnapshot.docs.map(doc => doc.data());
-      setLeaderboard(scores);
-    } catch (error) { console.error("Error cargando leaderboard:", error); }
+      setLeaderboard(querySnapshot.docs.map(doc => doc.data()));
+    } catch (error) { console.error("Error leaderboard:", error); }
   };
 
   useEffect(() => { fetchLeaderboard(); }, []);
 
-  // --- 2. Revisar Récord al Perder ---
   const checkHighScores = useCallback((finalScore) => {
     if (finalScore > localHighScore) {
       setLocalHighScore(finalScore);
       localStorage.setItem('byteHunterScore', finalScore.toString());
     }
-    // Siempre permite guardar si hiciste puntos
     if (finalScore > 0) setShowNameInput(true);
   }, [localHighScore]);
 
-  // --- 3. Guardar en la Nube ---
   const saveToLeaderboard = async () => {
-    if (playerName.trim() === '') { alert("¡Escribe un nombre!"); return; }
+    if (!playerName.trim()) return alert("¡Escribe un nombre!");
     try {
       await addDoc(collection(db, "scores"), { name: playerName, score: score, date: new Date() });
       await fetchLeaderboard();
@@ -88,23 +113,25 @@ function App() {
     } catch (error) { alert("Error: " + error.message); }
   };
 
-  // --- LÓGICA DE JUEGO: Subir Nivel Instantáneo ---
+  // --- EFECTOS DE JUEGO ---
+
+  // 1. Subir Nivel
   useEffect(() => {
     if (gameState === 'playing' && score >= targetTotalScore) {
       setLevel(prev => prev + 1);
-      setTimeLeft(30); // Reinicia reloj a 30s
-      playSound('levelup'); // Sonido de nivel subido
+      setTimeLeft(30); 
+      playSound('levelup'); 
     }
   }, [score, targetTotalScore, gameState, playSound]);
 
-  // --- LÓGICA DE JUEGO: Reloj Principal ---
+  // 2. Reloj y Game Over
   useEffect(() => {
     if (gameState !== 'playing') return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           setGameState('gameover');
-          playSound('gameover');
+          playSound('gameover'); 
           checkHighScores(scoreRef.current);
           return 0;
         }
@@ -114,40 +141,31 @@ function App() {
     return () => clearInterval(timer);
   }, [gameState, checkHighScores, playSound]);
 
-  // --- EVENTO ESPECIAL: Corazón Fugaz (Cada 60s, dura 4s) ---
+  // 3. Corazón de Vida (Lento - 10s)
   useEffect(() => {
-    if (gameState !== 'playing') {
-      setShowHeart(false);
-      return;
-    }
-
+    if (gameState !== 'playing') { setShowHeart(false); return; }
     const heartSpawner = setInterval(() => {
       setShowHeart(true);
       setHeartClicks(0);
-      
-      // Desaparece a los 4 segundos si no lo atrapas
-      setTimeout(() => {
-        setShowHeart(false);
-      }, 4000); 
-
-    }, 60000); // Aparece cada 1 minuto
-
+      setTimeout(() => setShowHeart(false), 10000); 
+    }, 60000); 
     return () => clearInterval(heartSpawner);
   }, [gameState]);
 
-  // Click en el corazón
   const handleHeartClick = (e) => {
     e.stopPropagation(); 
     const newClicks = heartClicks + 1;
     setHeartClicks(newClicks);
+    playSound('virus'); 
 
     if (newClicks >= 3) {
-      setIntegrity(prev => Math.min(100, prev + 10)); // Cura 10%
+      setIntegrity(prev => Math.min(100, prev + 10));
       setShowHeart(false);
+      playSound('levelup'); 
     }
   };
 
-  // --- Spawner de Enemigos ---
+  // 4. Spawner de Enemigos (PARTÍCULAS)
   const spawnRate = Math.max(250, 1000 - (level - 1) * 120); 
   useEffect(() => {
     if (gameState !== 'playing') return;
@@ -164,30 +182,40 @@ function App() {
     
     const x = Math.random() * 80 + 10; 
     const y = Math.random() * 60 + 20; 
-    setTargets((prev) => [...prev, { id, x, y, type }]);
+    
+    // IMPORTANTE: isHit en false al crear
+    setTargets((prev) => [...prev, { id, x, y, type, isHit: false }]);
     
     const disappearTime = Math.max(800, 2500 - (level * 150));
-    setTimeout(() => { setTargets((prev) => prev.filter((t) => t.id !== id)); }, disappearTime);
+    setTimeout(() => { 
+      // Solo borrar si NO ha sido golpeado (si fue golpeado, se encarga el otro efecto)
+      setTargets((prev) => prev.filter((t) => t.id !== id && !t.isHit)); 
+    }, disappearTime);
   };
 
+  // --- LÓGICA DE CLIC (CON ANIMACIÓN DE EXPLOSIÓN) ---
   const handleTargetClick = (id, type) => {
-    setTargets((prev) => prev.filter((t) => t.id !== id));
-    
-    // Reproducir sonido según tipo
+    // 1. Marcar como golpeado (activa animación CSS)
+    setTargets(prev => prev.map(t => t.id === id ? { ...t, isHit: true } : t));
+
+    // 2. Puntos y sonido inmediatos
     if (type === 'virus') {
       setScore(prev => prev + 10);
-      playSound('virus');
-    }
-    else if (type === 'file') { 
+      playSound('virus'); 
+    } else if (type === 'file') { 
       setScore(prev => Math.max(0, prev - 10)); 
       updateIntegrity(15);
-      playSound('file');
-    }
-    else if (type === 'trojan') { 
+      playSound('file'); 
+    } else if (type === 'trojan') { 
       setScore(prev => Math.max(0, prev - 50)); 
       updateIntegrity(35);
-      playSound('trojan');
+      playSound('trojan'); 
     }
+
+    // 3. Borrar tras 0.5s (fin de animación)
+    setTimeout(() => {
+      setTargets(prev => prev.filter(t => t.id !== id));
+    }, 500);
   };
 
   const updateIntegrity = (damage) => {
@@ -206,6 +234,8 @@ function App() {
   const startGame = () => {
     setScore(0); setIntegrity(100); setTimeLeft(30); setLevel(1); setTargets([]);
     setShowHeart(false); setShowNameInput(false); setGameState('playing');
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) new AudioContext().resume();
   };
 
   return (
@@ -216,9 +246,13 @@ function App() {
       
       <div className="stats">
         <div className="stats-info">
+          {/* --- AQUÍ ESTÁ EL SCORE GENERAL QUE FALTABA --- */}
+          <span className="total-score-display">SCORE: {score}</span>
+          <span className="separator">|</span>
           <span style={{ color: currentLevelProgress >= POINTS_PER_LEVEL ? '#00ff41' : 'white' }}>
             PROGRESO: {currentLevelProgress} / {POINTS_PER_LEVEL}
           </span>
+          <span className="separator">|</span>
           <span className={timeLeft <= 10 ? 'timer-warning' : ''}>TIEMPO: {timeLeft}s</span>
         </div>
         <div className="health-bar-container">
@@ -230,13 +264,12 @@ function App() {
       <main className="game-wrapper">
         {gameState === 'playing' && (
           <div className="game-board">
+            {/* Targets con soporte de toque móvil y partículas */}
             {targets.map((target) => ( <Target key={target.id} {...target} onClick={handleTargetClick} /> ))}
             
-            {/* CORAZÓN DE VIDA */}
             {showHeart && (
-              <div className="recovery-heart" onMouseDown={handleHeartClick}>
-                ❤️
-                <span className="heart-clicks">{3 - heartClicks}</span>
+              <div className="recovery-heart" onMouseDown={handleHeartClick} onTouchStart={(e) => { e.preventDefault(); handleHeartClick(e); }}>
+                ❤️<span className="heart-clicks">{3 - heartClicks}</span>
               </div>
             )}
           </div>
@@ -248,12 +281,11 @@ function App() {
             <div className="instructions-container">
               <div className="instruction-item"><span className="icon">👾</span><p><strong>VIRUS:</strong> Elimínalos.<br/><span>+10 Puntos</span></p></div>
               <div className="instruction-item"><span className="icon">📁</span><p><strong>ARCHIVO:</strong> No tocar.<br/><span>-15% Vida | -10 Puntos</span></p></div>
-              <div className="instruction-item"><span className="icon">❤️</span><p><strong>RECOVERY:</strong> ¡Fugaz (4s)!<br/><span>Click x3 = +10% Vida</span></p></div>
+              <div className="instruction-item"><span className="icon">❤️</span><p><strong>RECOVERY:</strong> Lento (10s).<br/><span>Click x3 = +10% Vida</span></p></div>
               <div className="mission-box"><p>Obtén <strong>150 puntos</strong> en <strong>30s</strong> para avanzar.</p></div>
             </div>
             <p style={{fontSize:'0.8rem', color: '#888'}}>Mejor Personal: {localHighScore}</p>
             <button onClick={startGame} className="start-btn">INICIAR ESCANEO</button>
-            
             <div className="leaderboard-list">
               <h4 style={{borderBottom:'1px solid #00ff41', paddingBottom:'5px'}}>🌐 TOP MUNDIAL</h4>
               {leaderboard.length > 0 ? leaderboard.map((e, i) => (<div key={i} className="leaderboard-item"><span>{i+1}. {e.name}</span><span>{e.score}</span></div>)) : <p>Cargando...</p>}
@@ -276,7 +308,7 @@ function App() {
           </div>
         )}
       </main>
-      <footer className="game-footer"><p>Byte Hunter v9.0 | © 2026</p></footer>
+      <footer className="game-footer"><p>Byte Hunter v11.0 | 2026</p></footer>
     </div>
   );
 }
